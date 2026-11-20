@@ -217,7 +217,8 @@ is kept local.
 
 | Check | Result |
 | --- | --- |
-| Automated suite with the employer workbook | 120 passed, including all 12 reference checks. The 10 live cases were skipped. |
+| Offline suite with the employer workbook | 120 passed, including all 12 reference checks. |
+| Live OpenAI evaluation with the employer workbook | 10 of 10 passed with `gpt-4.1-mini`, including the two-condition request that must return `unsupported`. |
 | Interactive API check with the employer workbook | 10 of 10 questions matched the expected responses. |
 | Interactive API check with a synthetic maintenance workbook | 17 of 17 questions matched the expected responses. |
 
@@ -230,8 +231,8 @@ covered the first sheet rule, blank values, date and boolean filters, zero
 matches and unsupported requests.
 
 Uvicorn startup, `/docs` and a reference upload were also verified locally.
-The OpenAI API integration and the configured model's interpretation accuracy
-await a live run with a valid `OPENAI_API_KEY`.
+The live evaluation checked both the model's query plans and the calculated
+results against the expected outcomes for those ten questions.
 
 ## Known limitations and possible improvements
 
@@ -241,8 +242,8 @@ retention cleanup or production-grade scalability. Filter responses return all
 matching records. Do not expose it publicly as a production service.
 
 Strict output and semantic checks do not prove that a valid plan faithfully
-represents every natural-language request. Ambiguity is addressed in the planner
-prompt, but interpretation quality still needs live evaluation. Prompt
+represents every natural-language request. The planner prompt addresses
+ambiguity, and the live evaluation covers a fixed set of ten questions. Prompt
 instructions alone do not eliminate prompt injection. The security boundary is
 the finite operation schema, validation, absence of execution tools and fixed
 executor. Headers and sampled cells are disclosed to the configured provider.
