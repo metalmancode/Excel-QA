@@ -1,3 +1,5 @@
+"""Define the API payloads and the structured response expected from the model."""
+
 from typing import Literal
 from uuid import UUID
 
@@ -19,6 +21,8 @@ class QueryPlan(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """Identify a workbook and carry one independent natural-language question."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     workbook_id: UUID
@@ -26,6 +30,8 @@ class ChatRequest(BaseModel):
 
 
 class WorkbookMetadata(BaseModel):
+    """Identify the first worksheet available for querying after upload."""
+
     workbook_id: UUID
     filename: str
     worksheet_name: str
@@ -33,10 +39,14 @@ class WorkbookMetadata(BaseModel):
 
 
 class UploadResponse(BaseModel):
+    """Return one metadata entry per file in the accepted upload batch."""
+
     workbooks: list[WorkbookMetadata]
 
 
 class ChatResponse(BaseModel):
+    """Return a number or matching rows with the source workbook details."""
+
     operation: Operation
     result: int | float | list[dict[str, Scalar | None]] | None
     filename: str

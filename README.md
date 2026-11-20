@@ -149,9 +149,10 @@ LangChain, RAG, databases and task queues add no value to these three operations
 - String equality is case-sensitive and exact, with no substring search,
   fuzzy matching or trimming of cell values. For an unambiguous category the
   planner can resolve the user's wording to its exact spelling in the schema.
-- Numeric filters need JSON numbers; boolean filters need JSON booleans.
-  Numeric-looking text remains text. Numeric nulls are skipped by sum, including
-  an all-null column when it has a numeric dtype. No matches yield `[]` for
+- Numeric filters need JSON numbers. Boolean filters use JSON `true` or
+  `false`. Blank cells in a boolean column remain missing and match neither
+  value. Numeric-looking text remains text. Sums skip missing values, including
+  when the entire numeric column is missing. No matches yield `[]` for
   filter and `0` for count/sum. Count uses row count, never non-null cell count.
 - Null equality filtering is outside scope. Date filters use timezone-free ISO
   8601 equality. A date without a time means midnight, not a whole-day range.
@@ -217,8 +218,8 @@ is kept local.
 
 | Check | Result |
 | --- | --- |
-| Offline suite with the employer workbook | 120 passed, including all 12 reference checks. |
-| Live OpenAI evaluation with the employer workbook | 10 of 10 passed with `gpt-4.1-mini`, including the two-condition request that must return `unsupported`. |
+| Offline suite with the employer workbook | 122 passed, including all 12 reference checks and both boolean filter cases with a blank cell. |
+| Previous live OpenAI evaluation with the employer workbook | 10 of 10 passed with `gpt-4.1-mini`, including the two-condition request that must return `unsupported`. |
 | Interactive API check with the employer workbook | 10 of 10 questions matched the expected responses. |
 | Interactive API check with a synthetic maintenance workbook | 17 of 17 questions matched the expected responses. |
 

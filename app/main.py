@@ -1,3 +1,5 @@
+"""Connect the upload and query endpoints to their application services."""
+
 from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -15,6 +17,8 @@ from app.workbook_store import WorkbookStore
 
 
 def create_app(settings: Settings | None = None, planner: Planner | None = None) -> FastAPI:
+    """Create an independent workbook store and allow tests to supply a planner."""
+
     settings = settings if settings is not None else Settings.from_env()
     api = FastAPI(title="Excel Q&A API", version="1.0.0")
     api.state.store = WorkbookStore()
@@ -26,27 +30,38 @@ def create_app(settings: Settings | None = None, planner: Planner | None = None)
         try:
             if not files or len(files) > settings.max_upload_files:
                 raise InvalidWorkbook(f"Provide 1 to {settings.max_upload_files} files using the 'files' field.")
+
+            # Read one byte past the limit so oversized files are rejected.
             workbooks = []
             for file in files:
                 content = await file.read(settings.max_upload_bytes + 1)
                 workbooks.append(await run_in_threadpool(load_excel, file.filename or "", content, settings))
+
+            # Register the batch only after every file has been parsed.
             return UploadResponse(workbooks=api.state.store.register_many(workbooks))
         except InvalidWorkbook as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:
+            # Release the uploaded file streams even if validation fails.
             for file in files or []:
                 await file.close()
 
     @api.post("/chat", response_model=ChatResponse)
     async def chat(request: ChatRequest) -> ChatResponse:
         """Interpret once, validate against this workbook, calculate locally."""
+
+        # Resolve the selected workbook before spending a model request.
         workbook = api.state.store.get(request.workbook_id)
         if workbook is None:
             raise HTTPException(status_code=404, detail="Workbook ID not found. Upload the workbook first.")
         try:
+            # Profile the table and let the model propose a plan. The validator
+            # checks the plan against the actual data before it can run.
             schema = await run_in_threadpool(profile_schema, workbook.dataframe)
             plan = await api.state.planner.plan(request.question, schema)
             validated = await run_in_threadpool(validate_plan, workbook.dataframe, plan)
+
+            # Unsupported questions still return a message and workbook metadata.
             if validated.operation == "unsupported":
                 result = None
                 message = "This question is unsupported or ambiguous. Ask for a row count, a numeric sum, or records with at most one exact-match filter."
@@ -57,6 +72,7 @@ def create_app(settings: Settings | None = None, planner: Planner | None = None)
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except PlannerUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
         return ChatResponse(
             operation=plan.operation,
             result=result,
@@ -68,4 +84,5 @@ def create_app(settings: Settings | None = None, planner: Planner | None = None)
     return api
 
 
+# Export the ASGI application used by Uvicorn.
 app = create_app()

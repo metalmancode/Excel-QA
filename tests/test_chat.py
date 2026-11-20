@@ -44,6 +44,37 @@ def test_other_results(chat_context, plan, expected):
     assert response.json()["result"] == expected
 
 
+@pytest.mark.parametrize(
+    ("active", "expected_device"),
+    [(True, "Printer"), (False, "Scanner")],
+)
+def test_filter_boolean_column_with_a_blank_cell(active, expected_device):
+    """Excel blanks should match neither true nor false."""
+    workbook = make_xlsx(
+        ["Device", "Active"],
+        [["Printer", True], ["Monitor", None], ["Scanner", False]],
+    )
+    planner = AsyncMock()
+    planner.plan.return_value = make_plan("filter", column="Active", value=active)
+
+    with TestClient(create_app(Settings(), planner)) as client:
+        upload = client.post("/upload", files=[("files", ("devices.xlsx", workbook))])
+        assert upload.status_code == 200
+        workbook_id = upload.json()["workbooks"][0]["workbook_id"]
+        response = client.post(
+            "/chat",
+            json={
+                "workbook_id": workbook_id,
+                "question": f"Show devices with Active = {str(active).lower()}",
+            },
+        )
+
+    assert response.status_code == 200, response.json()
+    records = response.json()["result"]
+    assert records == [{"Device": expected_device, "Active": active}]
+    assert records[0]["Active"] is active
+
+
 def test_unknown_workbook_does_not_call_model(chat_context):
     client, planner, _ = chat_context
     assert client.post("/chat", json={"workbook_id": str(uuid4()), "question": "Count rows"}).status_code == 404

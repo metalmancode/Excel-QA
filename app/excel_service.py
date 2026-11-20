@@ -6,6 +6,7 @@ from zipfile import BadZipFile, ZipFile
 
 import pandas as pd
 from openpyxl import load_workbook
+from pandas.api.types import infer_dtype
 
 from app.config import Settings
 from app.errors import InvalidWorkbook
@@ -13,10 +14,13 @@ from app.workbook_store import Workbook
 
 
 def load_excel(filename: str, content: bytes, settings: Settings) -> Workbook:
+    """Build a workbook record from the first sheet of a validated XLSX upload."""
+    # Check upload metadata before sending any bytes to the workbook reader.
     if PurePath(filename).suffix.lower() != ".xlsx":
         raise InvalidWorkbook("Only .xlsx files are accepted.")
     if not content or len(content) > settings.max_upload_bytes:
         raise InvalidWorkbook("File is empty or exceeds MAX_UPLOAD_BYTES.")
+    # XLSX is a ZIP archive. Bound the total expanded size before parsing XML.
     try:
         with ZipFile(BytesIO(content)) as archive:
             if sum(item.file_size for item in archive.infolist()) > settings.max_xlsx_uncompressed_bytes:
@@ -33,6 +37,7 @@ def load_excel(filename: str, content: bytes, settings: Settings) -> Workbook:
             # Do not trust a producer's dimension metadata when reading rows.
             sheet.reset_dimensions()
             rows = sheet.iter_rows(values_only=True)
+            # Use row one as the schema and reject missing or ambiguous names.
             raw_headers = next(rows, ())
             if not raw_headers or len(raw_headers) > settings.max_worksheet_columns:
                 raise InvalidWorkbook("The first worksheet has no headers or too many columns.")
@@ -41,6 +46,7 @@ def load_excel(filename: str, content: bytes, settings: Settings) -> Workbook:
             headers = [value.strip() for value in raw_headers]
             if len(set(headers)) != len(headers):
                 raise InvalidWorkbook("Duplicate column headers are not allowed.")
+            # Align rows to the headers, preserving blank cells within data rows.
             data = []
             for index, row in enumerate(rows, start=1):
                 if index > settings.max_worksheet_rows:
@@ -58,4 +64,12 @@ def load_excel(filename: str, content: bytes, settings: Settings) -> Workbook:
     except Exception as exc:
         # Parser failures contain untrusted XML, paths and implementation details.
         raise InvalidWorkbook("File is not a readable XLSX workbook.") from exc
-    return Workbook(filename, sheet_name, pd.DataFrame(data, columns=headers))
+    dataframe = pd.DataFrame(data, columns=headers)
+    # A blank cell can make pandas infer object for an Excel boolean column.
+    # Restore its boolean type while preserving blanks as missing values.
+    for name, column in dataframe.items():
+        if column.dtype == object and infer_dtype(column, skipna=True) == "boolean":
+            dataframe[name] = column.astype("boolean")
+
+    # Keep the sheet identity alongside its table for later API responses.
+    return Workbook(filename, sheet_name, dataframe)

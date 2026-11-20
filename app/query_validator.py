@@ -1,3 +1,5 @@
+"""Validate model plans against the selected workbook before execution."""
+
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -11,6 +13,8 @@ from app.models import QueryPlan, Scalar
 
 @dataclass(frozen=True)
 class ValidatedPlan:
+    """Fields checked against the table, with date values ready to compare."""
+
     operation: str
     target_column: str | None
     filter_column: str | None
@@ -18,20 +22,24 @@ class ValidatedPlan:
 
 
 def is_summable(series: pd.Series) -> bool:
+    """Apply the same numeric rule during profiling and plan validation."""
     return is_numeric_dtype(series.dtype) and not is_bool_dtype(series.dtype)
 
 
 def validate_plan(dataframe: pd.DataFrame, plan: QueryPlan) -> ValidatedPlan:
+    """Reject invalid operations, unknown columns, and incompatible values."""
     try:
         # Revalidate even objects supplied by a custom planner/model_construct.
         plan = QueryPlan.model_validate(plan.model_dump())
     except (ValidationError, AttributeError) as exc:
         raise InvalidPlan("The planner returned an invalid query structure.") from exc
 
+    # A filter is meaningful only when the column and the value are both present.
     has_column = plan.filter_column is not None
     has_value = plan.filter_value is not None
     if has_column != has_value:
         raise InvalidPlan("An exact-match filter needs both a column and a non-null value.")
+    # Each operation is allowed to specify only the fields it can use.
     if plan.operation == "unsupported":
         if plan.target_column is not None or has_column or has_value:
             raise InvalidPlan("An unsupported plan must not contain executable fields.")
@@ -45,6 +53,7 @@ def validate_plan(dataframe: pd.DataFrame, plan: QueryPlan) -> ValidatedPlan:
     if plan.operation == "filter" and not has_column:
         raise InvalidPlan("Filter requires one exact-match condition.")
 
+    # Check types before comparison so, for example, true is distinct from 1.
     filter_value = plan.filter_value
     if has_column:
         if plan.filter_column not in dataframe.columns:

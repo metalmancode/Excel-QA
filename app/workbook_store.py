@@ -1,3 +1,5 @@
+"""Keep uploaded workbook tables available within a single API process."""
+
 from dataclasses import dataclass
 from threading import Lock
 from uuid import UUID, uuid4
@@ -9,6 +11,8 @@ from app.models import WorkbookMetadata
 
 @dataclass(frozen=True)
 class Workbook:
+    """Pair the first worksheet's table with its uploaded file and sheet names."""
+
     filename: str
     worksheet_name: str
     dataframe: pd.DataFrame
@@ -22,9 +26,12 @@ class WorkbookStore:
         self._lock = Lock()
 
     def register_many(self, workbooks: list[Workbook]) -> list[WorkbookMetadata]:
+        """Publish a validated batch under fresh IDs and return its metadata."""
         entries = {uuid4(): workbook for workbook in workbooks}
+        # Hold the lock only while changing the shared registry.
         with self._lock:
             self._workbooks.update(entries)
+        # Upload responses expose identifiers and column names without table contents.
         return [
             WorkbookMetadata(
                 workbook_id=key,
@@ -36,9 +43,11 @@ class WorkbookStore:
         ]
 
     def get(self, workbook_id: UUID) -> Workbook | None:
+        """Look up a workbook in the registry for the current process."""
         with self._lock:
             return self._workbooks.get(workbook_id)
 
     def __len__(self) -> int:
+        """Count workbooks while holding the registry lock."""
         with self._lock:
             return len(self._workbooks)

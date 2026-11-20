@@ -1,4 +1,4 @@
-"""Actual OpenAI structured-output planner, with no calculation tools."""
+"""Translate worksheet questions into structured plans using OpenAI."""
 
 import json
 from typing import Protocol
@@ -10,6 +10,7 @@ from app.config import Settings
 from app.errors import PlannerUnavailable
 from app.models import QueryPlan
 
+# Define the supported query shape and how the model handles extra conditions.
 PLANNER_INSTRUCTIONS = """
 Translate a question about ONE table into a query plan, never an answer.
 Before selecting fields, identify every independent condition that restricts
@@ -58,14 +59,20 @@ filter_value=null. For unsupported set ALL three other fields to null.
 
 
 class Planner(Protocol):
+    """Let the service use either a provider or an injected test planner."""
+
     async def plan(self, question: str, schema: dict) -> QueryPlan: ...
 
 
 class OpenAIPlanner:
+    """Request a Pydantic query plan from the configured OpenAI model."""
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
     async def plan(self, question: str, schema: dict) -> QueryPlan:
+        """Return a structured plan or raise a safe availability error."""
+
         if not self.settings.openai_api_key:
             raise PlannerUnavailable("LLM interpretation is unavailable. Configure OPENAI_API_KEY.")
         try:
@@ -74,6 +81,7 @@ class OpenAIPlanner:
                 timeout=self.settings.llm_timeout_seconds,
                 max_retries=0,
             ) as client:
+                # Pass sheet content as structured input, separate from instructions.
                 response = await client.responses.parse(
                     model=self.settings.openai_model,
                     instructions=PLANNER_INSTRUCTIONS,
@@ -82,6 +90,7 @@ class OpenAIPlanner:
                     max_output_tokens=600,
                     store=False,
                 )
+            # A refusal or empty response may contain no parsed plan.
             parsed = response.output_parsed
             if parsed is None:
                 raise PlannerUnavailable("LLM interpretation returned no usable plan. Please rephrase or retry.")
