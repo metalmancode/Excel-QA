@@ -14,7 +14,7 @@ Run these commands from the existing Deloitte project directory:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 ```
 
 Set `OPENAI_API_KEY` in the local `.env` file or your shell environment. Do not
@@ -65,7 +65,7 @@ curl --fail-with-body http://127.0.0.1:8000/chat \
   -d '{"workbook_id":"00000000-0000-4000-8000-000000000000","question":"What is the total revenue for Germany?"}'
 ```
 
-For a compatible sales table, the response is:
+With the supplied employer workbook uploaded as `sales.xlsx`, the response is:
 
 ```json
 {
@@ -77,8 +77,7 @@ For a compatible sales table, the response is:
 }
 ```
 
-The example result applies to the supplied employer workbook. Application
-logic contains no dataset-specific names or value mappings.
+Application logic contains no dataset-specific names or value mappings.
 
 | Operation | Behavior |
 | --- | --- |
@@ -145,7 +144,8 @@ LangChain, RAG, databases and task queues add no value to these three operations
   duplicates after trimming are rejected. Matching uses those resulting names.
 - A worksheet needs at least one data row. Completely empty rows are ignored;
   partially empty rows are preserved. Additional nonempty columns without a
-  header are rejected. Other worksheets are ignored even if malformed.
+  header are rejected. The workbook must be readable. Only data in the first
+  worksheet can be queried.
 - String equality is case-sensitive and exact, with no substring search,
   fuzzy matching or trimming of cell values. For an unambiguous category the
   planner can resolve the user's wording to its exact spelling in the schema.
