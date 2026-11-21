@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from pydantic.json_schema import SkipJsonSchema, WithJsonSchema
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
@@ -16,6 +17,10 @@ from app.schema_profiler import profile_schema
 from app.workbook_store import WorkbookStore
 
 
+# Describe multipart items as binary files so Swagger renders a file picker.
+MultipartUpload = Annotated[UploadFile, WithJsonSchema({"type": "string", "format": "binary"})]
+
+
 def create_app(settings: Settings | None = None, planner: Planner | None = None) -> FastAPI:
     """Create an independent workbook store and allow tests to supply a planner."""
 
@@ -25,7 +30,9 @@ def create_app(settings: Settings | None = None, planner: Planner | None = None)
     api.state.planner = planner if planner is not None else OpenAIPlanner(settings)
 
     @api.post("/upload", response_model=UploadResponse)
-    async def upload(files: Annotated[list[UploadFile] | None, File()] = None) -> UploadResponse:
+    async def upload(
+        files: Annotated[list[MultipartUpload] | SkipJsonSchema[None], File()] = None,
+    ) -> UploadResponse:
         """Validate a batch atomically, then register first-worksheet tables."""
         try:
             if not files or len(files) > settings.max_upload_files:

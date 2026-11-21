@@ -70,4 +70,8 @@ def test_docs_and_openapi(client):
     assert client.get("/docs").status_code == 200
     schema = client.get("/openapi.json").json()
     assert {"/upload", "/chat"} <= schema["paths"].keys()
-    assert "multipart/form-data" in schema["paths"]["/upload"]["post"]["requestBody"]["content"]
+    multipart = schema["paths"]["/upload"]["post"]["requestBody"]["content"]["multipart/form-data"]
+    body_name = multipart["schema"]["$ref"].rsplit("/", 1)[-1]
+    files = schema["components"]["schemas"][body_name]["properties"]["files"]
+    assert files["type"] == "array"
+    assert files["items"]["format"] == "binary"
